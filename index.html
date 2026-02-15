@@ -1,36 +1,859 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="utf-8" />
-  <title>Young Innovators STEM Lab</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebXR Chemistry Lab — Young Innovators STEM Lab</title>
+  <meta name="description" content="Immersive WebXR Chemistry Lab built with A-Frame for Meta Quest 3s" />
+
+  <!-- ═══════════════════════════════════════════════════════════
+       A-FRAME + DEPENDENCIES (CDN)
+       ═══════════════════════════════════════════════════════════ -->
   <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.5.0/dist/aframe-extras.min.js"></script>
+
+  <!-- Custom JS modules -->
+  <script src="js/reaction-engine.js"></script>
+  <script src="js/lab-components.js"></script>
+  <script src="js/vfx-system.js"></script>
+  <script src="js/ui-system.js"></script>
+  <script src="js/locomotion.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 
 <body>
-  <a-scene>
 
-    <a-assets>
-      <a-asset-item id="tinkercadModel" src="./Fabulous Amberis-Robo.glb"></a-asset-item>
+  <!-- ═══════════════════════════════════════════════════════════
+       LOADING SCREEN
+       ═══════════════════════════════════════════════════════════ -->
+  <div id="loading-screen">
+    <div class="loader"></div>
+    <h1>🧪 WebXR Chemistry Lab</h1>
+    <p>Young Innovators STEM Lab</p>
+    <p class="loading-tip">Tip: Use Meta Quest 3s controllers — trigger to grab, grip to pick up, thumbstick to move.</p>
+  </div>
+
+  <!-- 2D Controls overlay (desktop fallback) -->
+  <div id="controls-overlay">
+    <button class="overlay-btn" onclick="toggleMode()">🔬 Toggle Mode</button>
+    <button class="overlay-btn" onclick="resetLab()">🔄 Reset Lab</button>
+  </div>
+
+  <!-- Info toast -->
+  <div id="info-toast"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       A-FRAME SCENE
+       ═══════════════════════════════════════════════════════════ -->
+  <a-scene
+    webxr="requiredFeatures: local-floor; optionalFeatures: hand-tracking, bounded-floor"
+    renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; maxCanvasWidth: 1920; maxCanvasHeight: 1920"
+    loading-screen="enabled: false"
+    cursor="rayOrigin: mouse"
+    raycaster="objects: .clickable, [grabbable-object], [mode-switch-button], [reset-button], .manual-prev, .manual-next, .faucet-handle, [bunsen-burner]"
+    sound-manager
+  >
+
+    <!-- ─────────────────────────────────────────────────────────
+         ASSETS
+         ───────────────────────────────────────────────────────── -->
+    <a-assets timeout="30000">
     </a-assets>
 
-    <a-sky color="purple"></a-sky>
-    <a-entity light="type: ambient; intensity: 0.7"></a-entity>
-    <a-entity light="type: directional; intensity: 0.8" position="2 4 -3"></a-entity>
-  <a-entity id="TO" gltf-model="#tinkercadModel" position="-1 -0.5 -3" rotation="0 45 0" scale="50 50 50"></a-entity>
-    <a-sphere position="0 0.25 -5" radius="1.25" color="#EF2D5E"></a-sphere>
-    <a-cylinder position="1 -0.25 -3" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
-    <a-plane position="0 -1 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane>
-    
-    <a-image src="https://raw.githubusercontent.com/alluringxstalwart/SourceYISL/main/Landscape.png" position="0 5 -10"
-      width="25" height="7.5"></a-image>
-    
-    <a-text value="Young Innovators STEM Lab" position="0 9.5 -10" align="center" color="white" font="mozillavr"
-      width="10" height="5" anchor="center">
-    </a-text>
+    <!-- ─────────────────────────────────────────────────────────
+         ENVIRONMENT: Skybox + Lighting
+         ───────────────────────────────────────────────────────── -->
+    <!-- Sky — soft indoor-lab tone -->
+    <a-sky color="#d4dce6"></a-sky>
 
+    <!-- Lighting rig -->
+    <a-entity light="type: ambient; color: #e8ecf0; intensity: 0.5"></a-entity>
+    <a-entity light="type: directional; color: #ffffff; intensity: 0.8; castShadow: true"
+              position="3 6 -2" target="#lab-center"></a-entity>
+    <!-- Overhead fluorescent-like fill lights -->
+    <a-entity light="type: point; color: #f0f4ff; intensity: 0.6; distance: 12; decay: 1.5"
+              position="0 3.2 -2"></a-entity>
+    <a-entity light="type: point; color: #f0f4ff; intensity: 0.4; distance: 10; decay: 1.5"
+              position="-3 3.2 -4"></a-entity>
+    <a-entity light="type: point; color: #f0f4ff; intensity: 0.4; distance: 10; decay: 1.5"
+              position="3 3.2 -4"></a-entity>
+
+    <!-- ─────────────────────────────────────────────────────────
+         LAB ROOM STRUCTURE
+         ───────────────────────────────────────────────────────── -->
+    <!-- Floor -->
+    <a-plane id="floor" position="0 0 -3" rotation="-90 0 0" width="12" height="10"
+             material="color: #b8b8b0; roughness: 0.9" class="clickable"
+             shadow="receive: true"></a-plane>
+
+    <!-- Ceiling -->
+    <a-plane position="0 3.5 -3" rotation="90 0 0" width="12" height="10"
+             material="color: #f0f0ec; roughness: 1"></a-plane>
+
+    <!-- Back wall -->
+    <a-plane position="0 1.75 -8" width="12" height="3.5"
+             material="color: #e8e4dc; roughness: 0.85"></a-plane>
+
+    <!-- Left wall -->
+    <a-plane position="-6 1.75 -3" rotation="0 90 0" width="10" height="3.5"
+             material="color: #e0ddd5; roughness: 0.85"></a-plane>
+
+    <!-- Right wall -->
+    <a-plane position="6 1.75 -3" rotation="0 -90 0" width="10" height="3.5"
+             material="color: #e0ddd5; roughness: 0.85"></a-plane>
+
+    <!-- Front wall (behind player, partial) -->
+    <a-plane position="-4 1.75 2" width="4" height="3.5"
+             material="color: #e0ddd5; roughness: 0.85"></a-plane>
+    <a-plane position="4 1.75 2" width="4" height="3.5"
+             material="color: #e0ddd5; roughness: 0.85"></a-plane>
+
+    <!-- Center marker (invisible, for targeting) -->
+    <a-entity id="lab-center" position="0 1 -3"></a-entity>
+
+    <!-- ─────────────────────────────────────────────────────────
+         LAB FURNITURE
+         ───────────────────────────────────────────────────────── -->
+
+    <!-- ═══ MAIN WORKBENCH (center) ═══ -->
+    <a-entity id="main-workbench" position="0 0 -3">
+      <!-- Table top -->
+      <a-box position="0 0.85 0" width="2.4" height="0.06" depth="0.9"
+             material="color: #2a2a2a; roughness: 0.4; metalness: 0.1"
+             shadow="cast: true; receive: true"></a-box>
+      <!-- Legs -->
+      <a-box position="-1.1 0.42 -0.35" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="1.1 0.42 -0.35" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="-1.1 0.42 0.35" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="1.1 0.42 0.35" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <!-- Under-shelf -->
+      <a-box position="0 0.3 0" width="2.3" height="0.03" depth="0.8"
+             material="color: #333"></a-box>
+    </a-entity>
+
+    <!-- ═══ SIDE WORKBENCH (left) ═══ -->
+    <a-entity id="side-bench-left" position="-3.5 0 -4">
+      <a-box position="0 0.85 0" width="1.8" height="0.06" depth="0.7"
+             material="color: #2a2a2a; roughness: 0.4"
+             shadow="cast: true; receive: true"></a-box>
+      <a-box position="-0.8 0.42 -0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="0.8 0.42 -0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="-0.8 0.42 0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="0.8 0.42 0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+    </a-entity>
+
+    <!-- ═══ SIDE WORKBENCH (right) ═══ -->
+    <a-entity id="side-bench-right" position="3.5 0 -4">
+      <a-box position="0 0.85 0" width="1.8" height="0.06" depth="0.7"
+             material="color: #2a2a2a; roughness: 0.4"
+             shadow="cast: true; receive: true"></a-box>
+      <a-box position="-0.8 0.42 -0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="0.8 0.42 -0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="-0.8 0.42 0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+      <a-box position="0.8 0.42 0.28" width="0.06" height="0.84" depth="0.06"
+             material="color: #555"></a-box>
+    </a-entity>
+
+    <!-- ═══ CHEMICAL SHELVING (back wall) ═══ -->
+    <a-entity id="shelf-unit" position="0 0 -7.8">
+      <!-- Shelf frame -->
+      <a-box position="0 1.8 0" width="3.0" height="0.04" depth="0.35"
+             material="color: #8B7355"></a-box>
+      <a-box position="0 1.3 0" width="3.0" height="0.04" depth="0.35"
+             material="color: #8B7355"></a-box>
+      <a-box position="0 0.8 0" width="3.0" height="0.04" depth="0.35"
+             material="color: #8B7355"></a-box>
+      <!-- Side supports -->
+      <a-box position="-1.5 1.3 0" width="0.04" height="1.2" depth="0.35"
+             material="color: #8B7355"></a-box>
+      <a-box position="1.5 1.3 0" width="0.04" height="1.2" depth="0.35"
+             material="color: #8B7355"></a-box>
+      <a-box position="0 1.3 0" width="0.04" height="1.2" depth="0.35"
+             material="color: #8B7355"></a-box>
+    </a-entity>
+
+    <!-- ═══ STORAGE CABINET (left wall) ═══ -->
+    <a-entity id="storage-cabinet" position="-5.8 0 -5">
+      <a-box position="0 0.9 0" width="0.8" height="1.8" depth="0.5"
+             material="color: #c0c0c0; metalness: 0.3; roughness: 0.5"></a-box>
+      <!-- Doors -->
+      <a-box position="-0.15 0.9 0.26" width="0.35" height="1.6" depth="0.02"
+             material="color: #aaa; metalness: 0.4"></a-box>
+      <a-box position="0.15 0.9 0.26" width="0.35" height="1.6" depth="0.02"
+             material="color: #aaa; metalness: 0.4"></a-box>
+      <!-- Handles -->
+      <a-cylinder position="-0.02 0.9 0.28" radius="0.008" height="0.12"
+                  rotation="0 0 0" material="color: #666; metalness: 0.6"></a-cylinder>
+      <a-cylinder position="0.02 0.9 0.28" radius="0.008" height="0.12"
+                  rotation="0 0 0" material="color: #666; metalness: 0.6"></a-cylinder>
+      <!-- Label -->
+      <a-text value="CHEMICAL\nSTORAGE" position="0 1.6 0.27" align="center"
+              color="#333" width="0.6"></a-text>
+    </a-entity>
+
+    <!-- ═══ FUME HOOD (back-left) ═══ -->
+    <a-entity id="fume-hood" position="-3 0 -7.5">
+      <!-- Base cabinet -->
+      <a-box position="0 0.45 0" width="1.4" height="0.9" depth="0.7"
+             material="color: #d0d0d0; roughness: 0.7"></a-box>
+      <!-- Work surface -->
+      <a-box position="0 0.91 0" width="1.5" height="0.04" depth="0.75"
+             material="color: #1a1a1a; roughness: 0.3"></a-box>
+      <!-- Hood enclosure -->
+      <a-box position="0 1.5 -0.35" width="1.5" height="1.2" depth="0.04"
+             material="color: #d0d0d0; opacity: 0.5; transparent: true"></a-box>
+      <a-box position="-0.75 1.5 0" width="0.04" height="1.2" depth="0.75"
+             material="color: #d0d0d0; opacity: 0.6; transparent: true"></a-box>
+      <a-box position="0.75 1.5 0" width="0.04" height="1.2" depth="0.75"
+             material="color: #d0d0d0; opacity: 0.6; transparent: true"></a-box>
+      <!-- Top -->
+      <a-box position="0 2.1 0" width="1.5" height="0.05" depth="0.75"
+             material="color: #c0c0c0"></a-box>
+      <!-- Sash (front glass) -->
+      <a-box position="0 1.5 0.35" width="1.4" height="1.0" depth="0.02"
+             material="color: #aaccff; opacity: 0.25; transparent: true; side: double"></a-box>
+      <!-- Label -->
+      <a-text value="FUME HOOD" position="0 2.15 0.1" align="center"
+              color="#333" width="1.0"></a-text>
+    </a-entity>
+
+    <!-- ═══ SINK AREA (right wall) ═══ -->
+    <a-entity id="lab-sink" position="4.5 0 -6" lab-sink>
+      <!-- Counter -->
+      <a-box position="0 0.85 0" width="1.2" height="0.06" depth="0.6"
+             material="color: #2a2a2a; roughness: 0.4"></a-box>
+      <a-box position="0 0.42 0" width="1.1" height="0.84" depth="0.55"
+             material="color: #d0d0d0"></a-box>
+      <!-- Basin -->
+      <a-box position="0 0.82 0" width="0.5" height="0.15" depth="0.35"
+             material="color: #e0e0e0; metalness: 0.5"></a-box>
+      <!-- Faucet -->
+      <a-entity position="0 0.88 -0.2">
+        <!-- Pipe -->
+        <a-cylinder radius="0.015" height="0.25" position="0 0.12 0"
+                    material="color: #999; metalness: 0.7"></a-cylinder>
+        <a-cylinder radius="0.015" height="0.12" position="0 0.25 0.06" rotation="90 0 0"
+                    material="color: #999; metalness: 0.7"></a-cylinder>
+        <!-- Handle -->
+        <a-cylinder class="faucet-handle clickable" radius="0.02" height="0.06"
+                    position="0.05 0.15 0" rotation="0 0 90"
+                    material="color: #4488ff; metalness: 0.5"></a-cylinder>
+      </a-entity>
+      <!-- Water stream (hidden by default) -->
+      <a-cylinder class="water-stream" radius="0.008" height="0.2"
+                  position="0 0.75 -0.08"
+                  material="color: #88ccff; opacity: 0.5; transparent: true; shader: flat"
+                  visible="false"></a-cylinder>
+      <!-- Label -->
+      <a-text value="SINK" position="0 1.15 0.31" align="center" color="#333" width="0.6"></a-text>
+    </a-entity>
+
+    <!-- ─────────────────────────────────────────────────────────
+         WALL DECORATIONS
+         ───────────────────────────────────────────────────────── -->
+
+    <!-- ═══ PERIODIC TABLE (back wall) ═══ -->
+    <a-entity id="periodic-table-wall" position="3.5 2.0 -7.9">
+      <!-- Frame -->
+      <a-plane width="2.4" height="1.4"
+               material="color: #ffffff; roughness: 0.9"></a-plane>
+      <!-- Title -->
+      <a-text value="PERIODIC TABLE OF ELEMENTS" position="0 0.55 0.01"
+              align="center" color="#222" width="2.0" font="mozillavr"></a-text>
+      <!-- Simplified visual grid — rows of coloured blocks -->
+      <!-- Row 1 -->
+      <a-plane position="-0.95 0.35 0.01" width="0.12" height="0.1" material="color: #ff6b6b; shader: flat"></a-plane>
+      <a-plane position="0.95 0.35 0.01" width="0.12" height="0.1" material="color: #74b9ff; shader: flat"></a-plane>
+      <!-- Row 2 -->
+      <a-plane position="-0.95 0.2 0.01" width="0.12" height="0.1" material="color: #ff6b6b; shader: flat"></a-plane>
+      <a-plane position="-0.8 0.2 0.01" width="0.12" height="0.1" material="color: #ffeaa7; shader: flat"></a-plane>
+      <a-plane position="0.65 0.2 0.01" width="0.12" height="0.1" material="color: #55efc4; shader: flat"></a-plane>
+      <a-plane position="0.8 0.2 0.01" width="0.12" height="0.1" material="color: #81ecec; shader: flat"></a-plane>
+      <a-plane position="0.95 0.2 0.01" width="0.12" height="0.1" material="color: #74b9ff; shader: flat"></a-plane>
+      <!-- Row 3 -->
+      <a-plane position="-0.95 0.05 0.01" width="0.12" height="0.1" material="color: #ff6b6b; shader: flat"></a-plane>
+      <a-plane position="-0.8 0.05 0.01" width="0.12" height="0.1" material="color: #ffeaa7; shader: flat"></a-plane>
+      <a-plane position="0.5 0.05 0.01" width="0.12" height="0.1" material="color: #dfe6e9; shader: flat"></a-plane>
+      <a-plane position="0.65 0.05 0.01" width="0.12" height="0.1" material="color: #55efc4; shader: flat"></a-plane>
+      <a-plane position="0.8 0.05 0.01" width="0.12" height="0.1" material="color: #81ecec; shader: flat"></a-plane>
+      <a-plane position="0.95 0.05 0.01" width="0.12" height="0.1" material="color: #74b9ff; shader: flat"></a-plane>
+      <!-- Row 4 (transition metals) -->
+      <a-plane position="-0.2 -0.1 0.01" width="1.2" height="0.1" material="color: #fab1a0; shader: flat"></a-plane>
+      <!-- Row 5 -->
+      <a-plane position="-0.2 -0.25 0.01" width="1.2" height="0.1" material="color: #e17055; shader: flat"></a-plane>
+      <!-- Legend labels -->
+      <a-text value="H                                                  He" position="0 0.35 0.02"
+              align="center" color="#222" width="2.0" font="mozillavr"></a-text>
+      <a-text value="Li Be                           B  C  N  O  F  Ne" position="0 0.2 0.02"
+              align="center" color="#222" width="2.0" font="mozillavr"></a-text>
+      <a-text value="Na Mg                          Al Si  P  S  Cl Ar" position="0 0.05 0.02"
+              align="center" color="#222" width="2.0" font="mozillavr"></a-text>
+      <a-text value="Transition Metals: Fe Cu Zn Ag Au" position="0 -0.1 0.02"
+              align="center" color="#222" width="2.0" font="mozillavr"></a-text>
+    </a-entity>
+
+    <!-- ═══ SAFETY POSTERS ═══ -->
+    <!-- Poster 1: left wall -->
+    <a-entity position="-5.9 2.0 -2">
+      <a-plane width="0.7" height="0.9" rotation="0 90 0"
+               material="color: #fff5e6; roughness: 0.95"></a-plane>
+      <a-text value="⚠ LAB SAFETY\n\n• Wear goggles\n• Wear gloves\n• No food or drink\n• Report spills\n• Know your exits"
+              position="0.01 0 0" rotation="0 90 0" align="center" color="#222" width="0.6"
+              wrap-count="22"></a-text>
+    </a-entity>
+
+    <!-- Poster 2: left wall -->
+    <a-entity position="-5.9 2.0 -6">
+      <a-plane width="0.7" height="0.9" rotation="0 90 0"
+               material="color: #e6f5ff; roughness: 0.95"></a-plane>
+      <a-text value="🔬 SCIENTIFIC\n   METHOD\n\n1. Observe\n2. Hypothesize\n3. Experiment\n4. Analyze\n5. Conclude"
+              position="0.01 0 0" rotation="0 90 0" align="center" color="#222" width="0.6"
+              wrap-count="22"></a-text>
+    </a-entity>
+
+    <!-- Overhead fluorescent light fixtures -->
+    <a-entity position="0 3.45 -3">
+      <a-box width="1.2" height="0.03" depth="0.12"
+             material="color: #ffffff; shader: flat; opacity: 0.9"></a-box>
+    </a-entity>
+    <a-entity position="-3 3.45 -5">
+      <a-box width="1.0" height="0.03" depth="0.12"
+             material="color: #ffffff; shader: flat; opacity: 0.9"></a-box>
+    </a-entity>
+    <a-entity position="3 3.45 -5">
+      <a-box width="1.0" height="0.03" depth="0.12"
+             material="color: #ffffff; shader: flat; opacity: 0.9"></a-box>
+    </a-entity>
+
+    <!-- ─────────────────────────────────────────────────────────
+         LAB EQUIPMENT (on main workbench)
+         ───────────────────────────────────────────────────────── -->
+
+    <!-- ═══ BEAKER: HCl ═══ -->
+    <a-entity id="beaker-hcl" position="-0.6 0.92 -3"
+              lab-container="chemicalId: HCl; containerType: beaker"
+              collision-checker
+              grabbable-object
+              bubble-particles
+              gas-particles
+              precipitate-effect
+              heat-glow
+              pour-stream
+              data-original-chemical="HCl"
+              data-original-position="-0.6 0.92 -3"
+              class="lab-container clickable">
+      <!-- Glass body -->
+      <a-cylinder radius="0.04" height="0.1" open-ended="true"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double; metalness: 0.1; roughness: 0.1"
+                  shadow="cast: true"></a-cylinder>
+      <!-- Liquid -->
+      <a-cylinder class="liquid" radius="0.035" height="0.07"
+                  position="0 -0.01 0"
+                  material="color: #e0ffe0; opacity: 0.7; transparent: true"></a-cylinder>
+      <!-- Bottom -->
+      <a-cylinder radius="0.04" height="0.003" position="0 -0.05 0"
+                  material="color: #ffffff; opacity: 0.35; transparent: true"></a-cylinder>
+      <!-- Label -->
+      <a-text class="container-label" value="HCl" position="0 0.06 0.042" align="center"
+              color="#006600" width="0.3" font="mozillavr"></a-text>
+      <!-- Spout rim -->
+      <a-torus position="0 0.05 0" radius="0.04" radius-tubular="0.003"
+               material="color: #ffffff; opacity: 0.2; transparent: true"></a-torus>
+    </a-entity>
+
+    <!-- ═══ BEAKER: NaOH ═══ -->
+    <a-entity id="beaker-naoh" position="-0.2 0.92 -3"
+              lab-container="chemicalId: NaOH; containerType: beaker"
+              collision-checker
+              grabbable-object
+              bubble-particles
+              gas-particles
+              precipitate-effect
+              heat-glow
+              pour-stream
+              data-original-chemical="NaOH"
+              data-original-position="-0.2 0.92 -3"
+              class="lab-container clickable">
+      <a-cylinder radius="0.04" height="0.1" open-ended="true"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double; metalness: 0.1; roughness: 0.1"></a-cylinder>
+      <a-cylinder class="liquid" radius="0.035" height="0.07" position="0 -0.01 0"
+                  material="color: #f0f0ff; opacity: 0.6; transparent: true"></a-cylinder>
+      <a-cylinder radius="0.04" height="0.003" position="0 -0.05 0"
+                  material="color: #ffffff; opacity: 0.35; transparent: true"></a-cylinder>
+      <a-text class="container-label" value="NaOH" position="0 0.06 0.042" align="center"
+              color="#000066" width="0.3" font="mozillavr"></a-text>
+      <a-torus position="0 0.05 0" radius="0.04" radius-tubular="0.003"
+               material="color: #ffffff; opacity: 0.2; transparent: true"></a-torus>
+    </a-entity>
+
+    <!-- ═══ BEAKER: CuSO4 ═══ -->
+    <a-entity id="beaker-cuso4" position="0.2 0.92 -3"
+              lab-container="chemicalId: CuSO4; containerType: beaker"
+              collision-checker
+              grabbable-object
+              bubble-particles
+              gas-particles
+              precipitate-effect
+              heat-glow
+              pour-stream
+              data-original-chemical="CuSO4"
+              data-original-position="0.2 0.92 -3"
+              class="lab-container clickable">
+      <a-cylinder radius="0.04" height="0.1" open-ended="true"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double; metalness: 0.1; roughness: 0.1"></a-cylinder>
+      <a-cylinder class="liquid" radius="0.035" height="0.07" position="0 -0.01 0"
+                  material="color: #1e90ff; opacity: 0.75; transparent: true"></a-cylinder>
+      <a-cylinder radius="0.04" height="0.003" position="0 -0.05 0"
+                  material="color: #ffffff; opacity: 0.35; transparent: true"></a-cylinder>
+      <a-text class="container-label" value="CuSO4" position="0 0.06 0.042" align="center"
+              color="#0044aa" width="0.3" font="mozillavr"></a-text>
+      <a-torus position="0 0.05 0" radius="0.04" radius-tubular="0.003"
+               material="color: #ffffff; opacity: 0.2; transparent: true"></a-torus>
+    </a-entity>
+
+    <!-- ═══ TEST TUBE: Zn ═══ -->
+    <a-entity id="testtube-zn" position="0.6 0.95 -3"
+              lab-container="chemicalId: Zn; containerType: testtube; volume: 30; maxVolume: 40"
+              collision-checker
+              grabbable-object
+              bubble-particles
+              gas-particles
+              precipitate-effect
+              heat-glow
+              pour-stream
+              data-original-chemical="Zn"
+              data-original-position="0.6 0.95 -3"
+              class="lab-container clickable">
+      <!-- Tube body -->
+      <a-cylinder radius="0.015" height="0.14" open-ended="true"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double"></a-cylinder>
+      <!-- Zinc pieces (grey solids) -->
+      <a-cylinder class="liquid" radius="0.012" height="0.04" position="0 -0.04 0"
+                  material="color: #c0c0c0; opacity: 0.9; roughness: 0.6; metalness: 0.4"></a-cylinder>
+      <!-- Rounded bottom -->
+      <a-sphere radius="0.015" position="0 -0.07 0"
+                material="color: #ffffff; opacity: 0.25; transparent: true"></a-sphere>
+      <a-text class="container-label" value="Zn" position="0 0.08 0.018" align="center"
+              color="#555" width="0.2" font="mozillavr"></a-text>
+    </a-entity>
+
+    <!-- ═══ FLASK: AgNO3 ═══ -->
+    <a-entity id="flask-agno3" position="-0.8 0.92 -2.65"
+              lab-container="chemicalId: AgNO3; containerType: flask"
+              collision-checker
+              grabbable-object
+              bubble-particles
+              gas-particles
+              precipitate-effect
+              heat-glow
+              pour-stream
+              data-original-chemical="AgNO3"
+              data-original-position="-0.8 0.92 -2.65"
+              class="lab-container clickable">
+      <!-- Flask body (Erlenmeyer shape approximation) -->
+      <a-cylinder radius="0.05" height="0.04" position="0 -0.03 0"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double"></a-cylinder>
+      <a-cone radius-bottom="0.05" radius-top="0.02" height="0.08" position="0 0.03 0"
+              material="color: #ffffff; opacity: 0.25; transparent: true; side: double"></a-cone>
+      <!-- Neck -->
+      <a-cylinder radius="0.012" height="0.03" position="0 0.08 0" open-ended="true"
+                  material="color: #ffffff; opacity: 0.25; transparent: true; side: double"></a-cylinder>
+      <!-- Liquid -->
+      <a-cylinder class="liquid" radius="0.045" height="0.03" position="0 -0.03 0"
+                  material="color: #f5f5f5; opacity: 0.5; transparent: true"></a-cylinder>
+      <a-text class="container-label" value="AgNO3" position="0 0.01 0.052" align="center"
+              color="#444" width="0.25" font="mozillavr"></a-text>
+    </a-entity>
+
+    <!-- ═══ BEAKER: H2O ═══ -->
+    <a-entity id="beaker-h2o" position="0.8 0.92 -2.65"
+              lab-container="chemicalId: H2O; containerType: beaker"
+              collision-checker
+              grabbable-object
+              bubble-particles
+              gas-particles
+              precipitate-effect
+              heat-glow
+              pour-stream
+              data-original-chemical="H2O"
+              data-original-position="0.8 0.92 -2.65"
+              class="lab-container clickable">
+      <a-cylinder radius="0.04" height="0.1" open-ended="true"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double"></a-cylinder>
+      <a-cylinder class="liquid" radius="0.035" height="0.07" position="0 -0.01 0"
+                  material="color: #cceeff; opacity: 0.5; transparent: true"></a-cylinder>
+      <a-cylinder radius="0.04" height="0.003" position="0 -0.05 0"
+                  material="color: #ffffff; opacity: 0.35; transparent: true"></a-cylinder>
+      <a-text class="container-label" value="H2O" position="0 0.06 0.042" align="center"
+              color="#0077cc" width="0.3" font="mozillavr"></a-text>
+      <a-torus position="0 0.05 0" radius="0.04" radius-tubular="0.003"
+               material="color: #ffffff; opacity: 0.2; transparent: true"></a-torus>
+    </a-entity>
+
+    <!-- ═══ DROPPER: Phenolphthalein ═══ -->
+    <a-entity id="dropper-phenol" position="0.4 0.95 -2.65"
+              lab-container="chemicalId: Phenolphthalein; containerType: dropper; volume: 10; maxVolume: 15"
+              collision-checker
+              grabbable-object
+              bubble-particles
+              gas-particles
+              precipitate-effect
+              heat-glow
+              pour-stream
+              data-original-chemical="Phenolphthalein"
+              data-original-position="0.4 0.95 -2.65"
+              class="lab-container clickable">
+      <!-- Dropper tube -->
+      <a-cylinder radius="0.008" height="0.1" open-ended="true"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double"></a-cylinder>
+      <!-- Rubber bulb -->
+      <a-sphere radius="0.015" position="0 0.06 0"
+                material="color: #cc3333; opacity: 0.9"></a-sphere>
+      <!-- Liquid inside -->
+      <a-cylinder class="liquid" radius="0.006" height="0.04" position="0 -0.01 0"
+                  material="color: #ffffff; opacity: 0.4; transparent: true"></a-cylinder>
+      <!-- Tip -->
+      <a-cone radius-bottom="0.008" radius-top="0.003" height="0.02" position="0 -0.06 0"
+              material="color: #ffffff; opacity: 0.35; transparent: true"></a-cone>
+      <a-text class="container-label" value="Phenol" position="0 0.03 0.012" align="center"
+              color="#882288" width="0.15" font="mozillavr"></a-text>
+    </a-entity>
+
+    <!-- ═══ MEASURING CYLINDER ═══ -->
+    <a-entity id="measuring-cylinder" position="-0.4 0.92 -2.65"
+              grabbable-object class="clickable">
+      <a-cylinder radius="0.02" height="0.16" open-ended="true"
+                  material="color: #ffffff; opacity: 0.25; transparent: true; side: double"></a-cylinder>
+      <a-cylinder radius="0.02" height="0.003" position="0 -0.08 0"
+                  material="color: #ffffff; opacity: 0.3; transparent: true"></a-cylinder>
+      <!-- Graduations (simple lines) -->
+      <a-plane position="0.021 0.04 0" width="0.01" height="0.001" rotation="0 0 0"
+               material="color: #333; shader: flat"></a-plane>
+      <a-plane position="0.021 0.0 0" width="0.015" height="0.001"
+               material="color: #333; shader: flat"></a-plane>
+      <a-plane position="0.021 -0.04 0" width="0.01" height="0.001"
+               material="color: #333; shader: flat"></a-plane>
+      <a-text value="mL" position="0.03 0.06 0" align="center" color="#333" width="0.08"></a-text>
+      <!-- Base -->
+      <a-cylinder radius="0.03" height="0.01" position="0 -0.085 0"
+                  material="color: #ddd; opacity: 0.4; transparent: true"></a-cylinder>
+    </a-entity>
+
+    <!-- ═══ STIRRING ROD ═══ -->
+    <a-entity id="stirring-rod" position="0 0.93 -2.5"
+              grabbable-object class="clickable">
+      <a-cylinder radius="0.003" height="0.2"
+                  material="color: #ffffff; opacity: 0.4; transparent: true; side: double"></a-cylinder>
+    </a-entity>
+
+    <!-- ═══ PIPETTE ═══ -->
+    <a-entity id="pipette" position="-0.3 0.94 -3.35"
+              grabbable-object class="clickable">
+      <!-- Tube -->
+      <a-cylinder radius="0.005" height="0.18"
+                  material="color: #ffffff; opacity: 0.3; transparent: true; side: double"></a-cylinder>
+      <!-- Bulb -->
+      <a-sphere radius="0.012" position="0 0.1 0"
+                material="color: #cc4444; opacity: 0.85"></a-sphere>
+      <!-- Tip -->
+      <a-cone radius-bottom="0.005" radius-top="0.002" height="0.015" position="0 -0.095 0"
+              material="color: #ffffff; opacity: 0.3; transparent: true"></a-cone>
+    </a-entity>
+
+    <!-- ═══ BUNSEN BURNER (side bench, left) ═══ -->
+    <a-entity id="bunsen-burner" position="-3.5 0.92 -4"
+              bunsen-burner
+              grabbable-object
+              class="clickable">
+      <!-- Base -->
+      <a-cylinder radius="0.05" height="0.015" position="0 -0.03 0"
+                  material="color: #333; metalness: 0.4; roughness: 0.4"></a-cylinder>
+      <!-- Barrel -->
+      <a-cylinder radius="0.018" height="0.12"
+                  material="color: #555; metalness: 0.5; roughness: 0.3"></a-cylinder>
+      <!-- Air hole ring -->
+      <a-torus position="0 -0.02 0" radius="0.02" radius-tubular="0.004"
+               material="color: #444; metalness: 0.5"></a-torus>
+      <!-- Knob -->
+      <a-cylinder class="burner-knob clickable" radius="0.008" height="0.025"
+                  position="0.025 -0.01 0" rotation="0 0 90"
+                  material="color: #2266ff; metalness: 0.3"></a-cylinder>
+      <!-- Gas hose -->
+      <a-cylinder radius="0.006" height="0.2" position="-0.08 -0.03 0" rotation="0 0 80"
+                  material="color: #333; roughness: 0.9"></a-cylinder>
+      <!-- Flame (hidden initially) -->
+      <a-entity class="flame" position="0 0.08 0" visible="false" flame-effect></a-entity>
+    </a-entity>
+
+    <!-- ═══ WEIGHING SCALE (side bench, right) ═══ -->
+    <a-entity id="weighing-scale" position="3.5 0.88 -4" weighing-scale>
+      <!-- Body -->
+      <a-box position="0 0.02 0" width="0.2" height="0.06" depth="0.15"
+             material="color: #e0e0e0; metalness: 0.2; roughness: 0.5"></a-box>
+      <!-- Plate -->
+      <a-cylinder class="scale-plate" radius="0.07" height="0.005" position="0 0.06 0.01"
+                  material="color: #c0c0c0; metalness: 0.6; roughness: 0.3"></a-cylinder>
+      <!-- Display screen -->
+      <a-plane position="0 0.04 0.076" width="0.1" height="0.03"
+               material="color: #001100; shader: flat"></a-plane>
+      <a-text class="scale-display" value="0.0 g" position="0 0.04 0.077"
+              align="center" color="#00ff00" width="0.18"></a-text>
+      <!-- Label -->
+      <a-text value="SCALE" position="0 -0.02 0.076" align="center" color="#666" width="0.15"></a-text>
+    </a-entity>
+
+    <!-- ═══ THERMOMETER (on shelf) ═══ -->
+    <a-entity id="thermometer" position="0.3 1.35 -7.7" thermometer-tool
+              grabbable-object class="clickable">
+      <!-- Body -->
+      <a-cylinder radius="0.006" height="0.18"
+                  material="color: #ffffff; opacity: 0.4; transparent: true; side: double"></a-cylinder>
+      <!-- Mercury -->
+      <a-cylinder class="mercury" radius="0.003" height="0.05" position="0 -0.03 0"
+                  material="color: #ff0000; shader: flat"></a-cylinder>
+      <!-- Bulb -->
+      <a-sphere radius="0.01" position="0 -0.09 0"
+                material="color: #ff0000; shader: flat"></a-sphere>
+      <!-- Display -->
+      <a-text class="thermo-display" value="25 C" position="0.02 0.03 0"
+              color="#ff0000" width="0.15" align="left"></a-text>
+    </a-entity>
+
+    <!-- ═══ pH METER (on shelf) ═══ -->
+    <a-entity id="ph-meter" position="-0.3 1.35 -7.7" ph-meter
+              grabbable-object class="clickable">
+      <!-- Body -->
+      <a-box position="0 0 0" width="0.04" height="0.15" depth="0.025"
+             material="color: #eee; roughness: 0.5"></a-box>
+      <!-- Screen -->
+      <a-plane position="0 0.03 0.013" width="0.03" height="0.02"
+               material="color: #001100; shader: flat"></a-plane>
+      <a-text class="ph-display" value="pH 7" position="0 0.03 0.014"
+              color="#00ff00" width="0.12" align="center"></a-text>
+      <!-- Probe -->
+      <a-cylinder radius="0.004" height="0.08" position="0 -0.1 0"
+                  material="color: #888; metalness: 0.5"></a-cylinder>
+      <!-- Label -->
+      <a-text value="pH" position="0 0.06 0.014" color="#333" width="0.08" align="center"></a-text>
+    </a-entity>
+
+    <!-- Extra bottles on shelf for decoration -->
+    <a-entity position="-0.8 1.35 -7.65">
+      <a-cylinder radius="0.02" height="0.08" material="color: #aa4400; opacity: 0.7; transparent: true"></a-cylinder>
+      <a-text value="Reagent" position="0 0.0 0.021" color="#fff" width="0.12" align="center"></a-text>
+    </a-entity>
+    <a-entity position="0.8 1.35 -7.65">
+      <a-cylinder radius="0.025" height="0.1" material="color: #446600; opacity: 0.6; transparent: true"></a-cylinder>
+      <a-text value="Solvent" position="0 0.0 0.026" color="#fff" width="0.12" align="center"></a-text>
+    </a-entity>
+    <a-entity position="-1.2 0.85 -7.65">
+      <a-cylinder radius="0.02" height="0.07" material="color: #664400; opacity: 0.8; transparent: true"></a-cylinder>
+    </a-entity>
+    <a-entity position="1.2 0.85 -7.65">
+      <a-cylinder radius="0.018" height="0.06" material="color: #003366; opacity: 0.7; transparent: true"></a-cylinder>
+    </a-entity>
+
+    <!-- ─────────────────────────────────────────────────────────
+         VR UI PANELS (floating in lab)
+         ───────────────────────────────────────────────────────── -->
+
+    <!-- ═══ REACTION INFO PANEL ═══ -->
+    <a-entity id="reaction-info-panel" reaction-info-panel
+              position="0 2.2 -4" rotation="0 0 0">
+      <!-- Background -->
+      <a-plane width="1.5" height="0.7"
+               material="color: #0a0a1e; opacity: 0.92; transparent: true; shader: flat; side: double"></a-plane>
+      <!-- Border glow -->
+      <a-plane width="1.54" height="0.74" position="0 0 -0.002"
+               material="color: #00ffcc; opacity: 0.15; transparent: true; shader: flat; side: double"></a-plane>
+      <!-- Text elements -->
+      <a-text class="panel-title" value="" position="0 0.25 0.01" align="center" width="1.4"></a-text>
+      <a-text class="panel-equation" value="" position="0 0.15 0.01" align="center" width="1.4"></a-text>
+      <a-text class="panel-type" value="" position="0 0.05 0.01" align="center" width="1.4"></a-text>
+      <a-text class="panel-explanation" value="" position="0 -0.08 0.01" align="center" width="1.4"></a-text>
+      <a-text class="panel-safety" value="" position="0 -0.25 0.01" align="center" width="1.4"></a-text>
+    </a-entity>
+
+    <!-- ═══ CHEMICAL INFO PANEL (appears on grab) ═══ -->
+    <a-entity id="chemical-info-panel" chemical-info-panel
+              position="0 2.5 -2.5">
+      <a-plane width="1.3" height="0.55"
+               material="color: #0e0e24; opacity: 0.92; transparent: true; shader: flat; side: double"></a-plane>
+      <a-plane width="1.34" height="0.59" position="0 0 -0.002"
+               material="color: #ffcc00; opacity: 0.12; transparent: true; shader: flat; side: double"></a-plane>
+      <a-text class="chem-name" value="" position="0 0.18 0.01" align="center" width="1.2"></a-text>
+      <a-text class="chem-formula" value="" position="0 0.08 0.01" align="center" width="1.2"></a-text>
+      <a-text class="chem-type" value="" position="0 0.0 0.01" align="center" width="1.2"></a-text>
+      <a-text class="chem-desc" value="" position="0 -0.1 0.01" align="center" width="1.2"></a-text>
+      <a-text class="chem-hazard" value="" position="0 -0.22 0.01" align="center" width="1.2"></a-text>
+    </a-entity>
+
+    <!-- ═══ SCORE / STATUS PANEL (right side) ═══ -->
+    <a-entity id="score-panel" score-panel
+              position="4 2.0 -3" rotation="0 -30 0">
+      <a-plane width="1.1" height="0.6"
+               material="color: #0a0a1e; opacity: 0.9; transparent: true; shader: flat; side: double"></a-plane>
+      <a-plane width="1.14" height="0.64" position="0 0 -0.002"
+               material="color: #00ff88; opacity: 0.12; transparent: true; shader: flat; side: double"></a-plane>
+      <a-text value="Lab Status" position="0 0.23 0.01" align="center" color="#00ffcc" width="0.9"></a-text>
+      <a-text class="score-value" value="Score: 0" position="0 0.13 0.01" align="center" width="1.0"></a-text>
+      <a-text class="temp-value" value="Temp: 25 C" position="0 0.04 0.01" align="center" width="1.0"></a-text>
+      <a-text class="mode-value" value="Free Experiment" position="0 -0.05 0.01" align="center" width="1.0"></a-text>
+      <a-text class="log-value" value="No reactions yet." position="0 -0.18 0.01" align="center" width="1.0"></a-text>
+    </a-entity>
+
+    <!-- ═══ GUIDED MODE PANEL (left side) ═══ -->
+    <a-entity id="guided-panel" guided-panel
+              position="-4 2.0 -3" rotation="0 30 0">
+      <a-plane width="1.5" height="0.9"
+               material="color: #0a0a1e; opacity: 0.9; transparent: true; shader: flat; side: double"></a-plane>
+      <a-plane width="1.54" height="0.94" position="0 0 -0.002"
+               material="color: #4488ff; opacity: 0.12; transparent: true; shader: flat; side: double"></a-plane>
+      <a-text value="Guided Mode" position="0 0.38 0.01" align="center" color="#4488ff" width="1.2"></a-text>
+      <a-text class="guided-title" value="" position="0 0.28 0.01" align="center" width="1.4"></a-text>
+      <a-text class="guided-objective" value="" position="0 0.18 0.01" align="center" width="1.4"></a-text>
+      <a-text class="guided-steps" value="" position="0 -0.02 0.01" align="center" width="1.4"></a-text>
+      <a-text class="guided-progress" value="" position="0 -0.38 0.01" align="center" width="1.4"></a-text>
+    </a-entity>
+
+    <!-- ═══ LAB MANUAL PANEL (back wall) ═══ -->
+    <a-entity id="lab-manual-panel" lab-manual
+              position="-2 2.2 -7.8">
+      <a-plane width="1.3" height="0.8"
+               material="color: #0e0e24; opacity: 0.9; transparent: true; shader: flat; side: double"></a-plane>
+      <a-plane width="1.34" height="0.84" position="0 0 -0.002"
+               material="color: #aa88ff; opacity: 0.12; transparent: true; shader: flat; side: double"></a-plane>
+      <a-text value="Lab Manual" position="0 0.33 0.01" align="center" color="#aa88ff" width="1.0"></a-text>
+      <a-text class="manual-title" value="" position="0 0.22 0.01" align="center" width="1.2"></a-text>
+      <a-text class="manual-content" value="" position="0 -0.0 0.01" align="center" width="1.2"></a-text>
+      <a-text class="manual-page" value="" position="0 -0.3 0.01" align="center" width="1.2"></a-text>
+      <!-- Nav buttons -->
+      <a-box class="manual-prev clickable" position="-0.4 -0.35 0.01" width="0.18" height="0.06" depth="0.02"
+             material="color: #3a3a6a">
+        <a-text value="Prev" position="0 0 0.012" align="center" color="#fff" width="0.4"></a-text>
+      </a-box>
+      <a-box class="manual-next clickable" position="0.4 -0.35 0.01" width="0.18" height="0.06" depth="0.02"
+             material="color: #3a3a6a">
+        <a-text value="Next" position="0 0 0.012" align="center" color="#fff" width="0.4"></a-text>
+      </a-box>
+    </a-entity>
+
+    <!-- ═══ MODE SWITCH BUTTON ═══ -->
+    <a-entity id="mode-btn" position="1.3 1.2 -2.2" mode-switch-button>
+      <a-box width="0.25" height="0.08" depth="0.04"
+             material="color: #1a3a7a; roughness: 0.3; metalness: 0.2"
+             class="clickable"></a-box>
+      <a-text class="btn-label" value="Free Mode" position="0 0 0.022"
+              align="center" color="#ffffff" width="0.6"></a-text>
+    </a-entity>
+
+    <!-- ═══ RESET BUTTON ═══ -->
+    <a-entity id="reset-btn" position="1.3 1.1 -2.2" reset-button>
+      <a-box width="0.25" height="0.08" depth="0.04"
+             material="color: #882222; roughness: 0.3; metalness: 0.2"
+             class="clickable"></a-box>
+      <a-text value="Reset Lab" position="0 0 0.022"
+              align="center" color="#ffffff" width="0.6"></a-text>
+    </a-entity>
+
+    <!-- ─────────────────────────────────────────────────────────
+         PLAYER RIG + CONTROLLERS
+         ───────────────────────────────────────────────────────── -->
+    <a-entity id="camera-rig" position="0 0 0">
+
+      <!-- Camera (head) -->
+      <a-entity id="head" camera="active: true" look-controls="pointerLockEnabled: false"
+                wasd-controls="acceleration: 20" position="0 1.6 0">
+        <!-- Desktop cursor (hidden in VR) -->
+        <a-entity cursor="fuse: false; rayOrigin: mouse"
+                  raycaster="objects: .clickable, [grabbable-object], [mode-switch-button], [reset-button], .manual-prev, .manual-next, .faucet-handle, [bunsen-burner]; far: 10">
+        </a-entity>
+      </a-entity>
+
+      <!-- LEFT CONTROLLER -->
+      <a-entity id="left-hand"
+                laser-controls="hand: left; model: true"
+                raycaster="objects: .clickable, [grabbable-object]; far: 5; lineColor: #00ffcc; lineOpacity: 0.5"
+                thumbstick-locomotion="hand: left; speed: 1.8"
+                teleport-locomotion
+                vr-hand-grab="hand: left">
+      </a-entity>
+
+      <!-- RIGHT CONTROLLER -->
+      <a-entity id="right-hand"
+                laser-controls="hand: right; model: true"
+                raycaster="objects: .clickable, [grabbable-object]; far: 5; lineColor: #00ccff; lineOpacity: 0.5"
+                snap-turn="hand: right; turnAngle: 45"
+                vr-hand-grab="hand: right">
+      </a-entity>
+
+    </a-entity>
 
   </a-scene>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       INITIALIZATION SCRIPT
+       ═══════════════════════════════════════════════════════════ -->
+  <script>
+    /* ── Hide loading screen when scene is ready ── */
+    const scene = document.querySelector('a-scene');
+    const loadingScreen = document.getElementById('loading-screen');
+
+    scene.addEventListener('loaded', () => {
+      setTimeout(() => {
+        loadingScreen.classList.add('hidden');
+        setTimeout(() => { loadingScreen.style.display = 'none'; }, 800);
+      }, 1500);
+    });
+
+    /* ── 2D overlay button functions ── */
+    function toggleMode () {
+      const eng = window.reactionEngine;
+      const newMode = eng.mode === 'free' ? 'guided' : 'free';
+      eng.setMode(newMode);
+      scene.emit('mode-changed', { mode: newMode });
+      showToast('Switched to ' + (newMode === 'free' ? 'Free Experiment' : 'Guided') + ' Mode');
+    }
+
+    function resetLab () {
+      const resetBtn = document.querySelector('[reset-button]');
+      if (resetBtn && resetBtn.components['reset-button']) {
+        resetBtn.components['reset-button'].resetLab();
+      }
+      showToast('Lab has been reset');
+    }
+
+    function showToast (msg) {
+      const toast = document.getElementById('info-toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    /* ── Detect WebXR ── */
+    if (navigator.xr) {
+      navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        if (supported) {
+          console.log('WebXR immersive VR supported — ready for Meta Quest 3s');
+        }
+      });
+    }
+  </script>
+
 </body>
 
 </html>
